@@ -15,8 +15,10 @@ source.dir = .
 # (list) Source files to include (let's specify extensions)
 source.exts = py,png,jpg,kv,atlas,json
 
+# (str) Application versioning (determined by version)
+version = 1.0
+
 # (list) Application requirements
-# comma separated e.g. requirements = sqlite3,kivy
 requirements = python3,kivy,openssl,urllib3,certifi
 
 # (str) Supported orientations
