@@ -41,20 +41,7 @@ jobs:
           pkg-config \
           libncurses5:i386 \
           libstdc++6:i386 \
-          libz1:i386 \
-          wget
-
-    - name: Install Android SDK & Commandline Tools
-      run: |
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk
-        cd $HOME/.buildozer/android/platform/android-sdk
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdtools.zip
-        unzip -q cmdtools.zip
-        mkdir -p cmdline-tools/latest
-        mv bin cmdline-tools/latest/
-        mv lib cmdline-tools/latest/
-        rm cmdtools.zip
-        echo "y" | $HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=$HOME/.buildozer/android/platform/android-sdk "platforms;android-33" "build-tools;33.0.2" "platform-tools"
+          libz1:i386
 
     - name: Install Buildozer and Cython
       run: |
