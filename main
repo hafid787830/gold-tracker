@@ -1,0 +1,314 @@
+from datetime import datetime
+import json
+import threading
+import urllib.request
+from kivy.app import App
+from kivy.clock import Clock
+from kivy.core.window import Window
+from kivy.graphics import Color, RoundedRectangle
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.button import Button
+from kivy.uix.label import Label
+from kivy.uix.popup import Popup
+from kivy.uix.scrollview import ScrollView
+from kivy.uix.textinput import TextInput
+
+Window.clearcolor = (0.08, 0.09, 0.11, 1)
+
+
+class ModernButton(Button):
+  """زر مخصص بتصميم عصري وحواف دائرية"""
+
+  def __init__(self, bg_color=(0.2, 0.6, 0.8, 1), radius=12, **kwargs):
+    super().__init__(**kwargs)
+    self.background_color = (0, 0, 0, 0)
+    self.bg_color = bg_color
+    self.radius = radius
+    self.bind(pos=self.update_canvas, size=self.update_canvas)
+
+  def update_canvas(self, *args):
+    self.canvas.before.clear()
+    with self.canvas.before:
+      Color(*self.bg_color)
+      RoundedRectangle(
+          pos=self.pos, size=self.size, radius=[(self.radius, self.radius)]
+      )
+
+
+class GoldTrackerApp(App):
+
+  def build(self):
+    self.title = "Gold Price Tracker (Algeria & EUR)"
+    root = BoxLayout(orientation="vertical", padding=14, spacing=10)
+
+    # رأس التطبيق (Header)
+    header = Label(
+        text="[b]Gold Price Tracker & DZ Markets[/b]",
+        font_size="18sp",
+        color=(1, 0.84, 0, 1),
+        size_hint=(1, 0.08),
+        markup=True,
+    )
+    root.add_widget(header)
+
+    # نافذة التمرير الرئيسية
+    self.scroll = ScrollView(size_hint=(1, 0.68))
+    self.info_label = Label(
+        text=(
+            "[color=aaaaaa]Tap 'Search by Date (JSON)' to load gold records"
+            " and DZD gram details from HISTORIQUES_DATA.JSON.[/color]"
+        ),
+        font_size="13sp",
+        color=(1, 1, 1, 1),
+        size_hint_y=None,
+        halign="center",
+        valign="middle",
+        markup=True,
+    )
+
+    self.info_label.bind(
+        width=lambda *x: setattr(
+            self.info_label, "text_size", (self.scroll.width - 30, None)
+        )
+    )
+    self.info_label.bind(
+        texture_size=lambda instance, value: setattr(
+            instance, "height", max(value[1] + 30, self.scroll.height)
+        )
+    )
+
+    self.scroll.add_widget(self.info_label)
+    root.add_widget(self.scroll)
+
+    # شريط الحالة
+    self.status_label = Label(
+        text="Status: Ready",
+        font_size="12sp",
+        color=(0.6, 0.6, 0.6, 1),
+        size_hint=(1, 0.04),
+    )
+    root.add_widget(self.status_label)
+
+    # الأزرار (تم حذف زر Refresh)
+    self.search_btn = ModernButton(
+        text="Search by Date (JSON)",
+        font_size="14sp",
+        bold=True,
+        bg_color=(0.18, 0.52, 0.72, 1),
+        size_hint=(1, 0.09),
+    )
+    self.search_btn.bind(on_press=self.show_search_popup)
+    root.add_widget(self.search_btn)
+
+    self.exit_btn = ModernButton(
+        text="Exit App",
+        font_size="14sp",
+        bold=True,
+        bg_color=(0.75, 0.22, 0.22, 1),
+        size_hint=(1, 0.09),
+    )
+    self.exit_btn.bind(on_press=self.show_exit_confirmation)
+    root.add_widget(self.exit_btn)
+
+    return root
+
+  @staticmethod
+  def calculate_karats(oz_value):
+    """حساب أسعار العيارات المختلفة بناءً على سعر الأوقية"""
+    gram_24 = oz_value / 31.1035
+    return {
+        "24K": gram_24,
+        "22K": gram_24 * (22 / 24),
+        "21K": gram_24 * (21 / 24),
+        "18K": gram_24 * (18 / 24),
+        "14K": gram_24 * (14 / 24),
+    }
+
+  def show_search_popup(self, instance):
+    content = BoxLayout(orientation="vertical", padding=16, spacing=12)
+    content.add_widget(
+        Label(
+            text="Enter Date (YYYY-MM-DD):",
+            font_size="13sp",
+            color=(0.9, 0.9, 0.9, 1),
+            size_hint=(1, 0.25),
+            halign="center",
+            valign="middle",
+        )
+    )
+
+    self.date_input = TextInput(
+        text=datetime.now().strftime("%Y-%m-%d"),
+        font_size="36sp",
+        halign="center",
+        multiline=False,
+        size_hint=(1, 0.45),
+        cursor_color=(1, 0.84, 0, 1),
+        foreground_color=(1, 1, 1, 1),
+        background_color=(0.15, 0.18, 0.24, 1),
+    )
+    content.add_widget(self.date_input)
+
+    btn_layout = BoxLayout(
+        orientation="horizontal", spacing=10, size_hint=(1, 0.3)
+    )
+    search_action_btn = ModernButton(
+        text="Search", bg_color=(0.18, 0.52, 0.72, 1), font_size="13sp", bold=True
+    )
+    cancel_btn = ModernButton(
+        text="Cancel", bg_color=(0.3, 0.3, 0.3, 1), font_size="13sp", bold=True
+    )
+
+    self.search_popup = Popup(
+        title="Search HISTORIQUES_DATA.JSON",
+        content=content,
+        size_hint=(0.85, 0.35),
+        auto_dismiss=True,
+    )
+    search_action_btn.bind(on_press=self.fetch_historical_data)
+    cancel_btn.bind(on_press=self.search_popup.dismiss)
+    btn_layout.add_widget(search_action_btn)
+    btn_layout.add_widget(cancel_btn)
+    content.add_widget(btn_layout)
+    self.search_popup.open()
+
+  def fetch_historical_data(self, instance):
+    target_date = self.date_input.text.strip()
+    self.search_popup.dismiss()
+    self.status_label.text = f"Searching for {target_date}..."
+    self.search_btn.disabled = True
+    threading.Thread(
+        target=self.process_search_logic, args=(target_date,), daemon=True
+    ).start()
+
+  def process_search_logic(self, target_date):
+    try:
+      with open("HISTORIQUES_DATA.JSON", "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+      records = data.get("سجل الأسعار الموحد", [])
+      target_dt = datetime.strptime(target_date, "%Y-%m-%d")
+
+      valid_records = []
+      for record in records:
+        d_str = record.get("prix de l'once d'or")
+        if d_str and d_str != "date":
+          try:
+            rec_dt = datetime.strptime(d_str, "%Y-%m-%d")
+            if rec_dt <= target_dt:
+              valid_records.append((rec_dt, record))
+          except ValueError:
+            continue
+
+      if valid_records:
+        valid_records.sort(key=lambda x: x[0], reverse=True)
+        closest_dt, found_record = valid_records[0]
+        actual_matched_date = closest_dt.strftime("%Y-%m-%d")
+
+        usd_val = found_record.get("Unnamed: 1", "N/A")
+        eur_val = found_record.get("Unnamed: 2", "N/A")
+        bank_dzd = found_record.get("Unnamed: 3", "N/A")
+
+        # حساب عيارات اليورو
+        eur_karats_text = ""
+        try:
+          eur_oz_float = float(str(eur_val).replace(",", ""))
+          k_eur = self.calculate_karats(eur_oz_float)
+          eur_karats_text = (
+              f"[b]--- International Gram Prices (EUR) ---[/b]\n"
+              f"• 18K Gram: [color=00ff00]€{k_eur['18K']:,.2f}[/color]\n"
+              f"• 21K Gram: €{k_eur['21K']:,.2f} | 24K Gram:"
+              f" €{k_eur['24K']:,.2f}\n\n"
+          )
+        except Exception:
+          pass
+
+        # حساب عيارات الدينار الجزائري (بنك فقط)
+        dzd_karats_text = ""
+        try:
+          bank_oz_float = float(str(bank_dzd).replace(",", ""))
+          k_bank = self.calculate_karats(bank_oz_float)
+
+          dzd_karats_text = (
+              f"[b]--- Algeria Gram Prices (DZD) ---[/b]\n"
+              f"[color=ffd700]BANK Market:[/color]\n"
+              f"  • 18K: [color=00ff00]{k_bank['18K']:,.2f} DZD[/color]\n"
+              f"  • 21K: {k_bank['21K']:,.2f} DZD | 24K:"
+              f" {k_bank['24K']:,.2f} DZD\n\n"
+          )
+        except Exception:
+          pass
+
+        text_output = (
+            f"[color=00ffff][b]Target Date: {target_date}[/b][/color]\n"
+            f"[color=ffa500](Nearest past date found:"
+            f" {actual_matched_date})[/color]\n\n"
+            f"{eur_karats_text}"
+            f"{dzd_karats_text}"
+            f"[b]--- Reference Ounce Prices ---[/b]\n"
+            f"• EUR Ounce: €{eur_val} | USD Ounce: ${usd_val}\n"
+            f"• BANK Ounce: {bank_dzd} DZD\n\n"
+            f"Status: [color=ffd700]Loaded nearest date from JSON[/color]"
+        )
+        status_text = f"Loaded nearest date: {actual_matched_date}"
+      else:
+        text_output = (
+            f"[color=ff4444]No prior records found in JSON file for date:"
+            f" {target_date}[/color]"
+        )
+        status_text = "No prior date found"
+
+    except FileNotFoundError:
+      text_output = (
+          "[color=ff4444]Error: 'HISTORIQUES_DATA.JSON' file not found in the"
+          " app directory.[/color]"
+      )
+      status_text = "Missing JSON File"
+    except Exception as e:
+      text_output = f"[color=ff4444]Error reading JSON: {str(e)}[/color]"
+      status_text = "Error"
+
+    Clock.schedule_once(
+        lambda dt: self.update_ui(text_output, status_text), 0
+    )
+
+  def show_exit_confirmation(self, instance):
+    content = BoxLayout(orientation="vertical", padding=12, spacing=10)
+    content.add_widget(
+        Label(
+            text="Are you sure you want to exit?",
+            font_size="13sp",
+            color=(1, 1, 1, 1),
+            size_hint=(1, 0.4),
+        )
+    )
+    btn_layout = BoxLayout(
+        orientation="horizontal", spacing=10, size_hint=(1, 0.6)
+    )
+    yes_btn = ModernButton(
+        text="Yes", bg_color=(0.75, 0.22, 0.22, 1), font_size="13sp", bold=True
+    )
+    no_btn = ModernButton(
+        text="Cancel", bg_color=(0.3, 0.3, 0.3, 1), font_size="13sp", bold=True
+    )
+    popup = Popup(
+        title="Confirm Exit",
+        content=content,
+        size_hint=(0.85, 0.22),
+        auto_dismiss=True,
+    )
+    yes_btn.bind(on_press=lambda x: App.get_running_app().stop())
+    no_btn.bind(on_press=popup.dismiss)
+    btn_layout.add_widget(yes_btn)
+    btn_layout.add_widget(no_btn)
+    content.add_widget(btn_layout)
+    popup.open()
+
+  def update_ui(self, main_text, status_text):
+    self.info_label.text = main_text
+    self.status_label.text = status_text
+    self.search_btn.disabled = False
+
+
+if __name__ == "__main__":
+  GoldTrackerApp().run()
