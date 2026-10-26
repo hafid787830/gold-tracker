@@ -19,7 +19,7 @@ source.exts = py,png,jpg,kv,atlas,json
 version = 1.0
 
 # (list) Application requirements
-requirements = python3,kivy,pyjnius,openssl,urllib3,certifi
+requirements = python3,kivy,openssl,urllib3,certifi
 
 # (str) Supported orientations
 orientation = portrait
