@@ -52,6 +52,9 @@ jobs:
     - name: Add local bin to PATH
       run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
+    - name: Accept Android SDK licenses
+      run: mkdir -p ~/.buildozer/android/platform/android-sdk && yes | sdkmanager --licenses || true
+
     - name: Build with Buildozer
       run: buildozer -v android debug
 
